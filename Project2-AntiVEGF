@@ -1,0 +1,126 @@
+/*Anti-VEGF Medicare/Medicaid and other insurance */
+
+drop table if exists drug;
+
+create TEMPORARY table drug as
+select patient_guid, effective_year, effective_month, vegf_type,
+case when vegf_type = 1 then 'Avastin'
+	 when vegf_type = 2 then 'Eylea'
+	 when vegf_type = 3 then 'Lucentis'
+	 when vegf_type = 4 then 'Beovu'
+else 'no_name' end as vegf_name
+from aao_test.pci_anti_vegf_type_20200131
+where effective_year between '2013' and '2019';
+
+select * from drug limit 100;
+-------
+/*Casing Insurance Types*/
+
+drop table if exists aa_gc_ins_process1;
+create temporary table aa_gc_ins_process1 as
+select distinct patient_guid, ins_type
+from madrid.patient_insurance 
+where patient_guid in (select distinct patient_guid from drug);
+
+drop table if exists aa_gc_ins_process2;
+create table aa_gc_ins_process2 as
+select distinct patient_guid, ins_type,
+case when ins_type ilike '%Listed%' then 1 else 0 end as npl,
+case when ins_type ilike '%Miscellaneous%' then 1 else 0 end as misc,
+case when ins_type ilike '%Advantage%' then 1 else 0 end as mc_mngd,
+case when ins_type ilike '%FFS%' then 1 else 0 end as mc_ffs,
+case when ins_type ilike '%Military%' then 1 else 0 end as mil,
+case when ins_type ilike '%Government%' then 1 else 0 end as other_gov,
+case when ins_type ilike '%Blue%' then 1 else 0 end as bcbs,
+case when ins_type ilike 'Medicaid%' then 1 else 0 end as medicaid,
+case when ins_type ilike '%Unclassified%' then 1 else 0 end as unclass,
+case when ins_type ilike '%Private Health Insurance%' then 1 else 0 end as private,
+case when ins_type ilike '%Unspecified%' then 1 else 0 end as mngd_unspec,
+case when ins_type ilike '%Corrections%' then 1 else 0 end as dept_corr
+from aa_gc_ins_process1;
+
+drop table if exists aa_gc_ins_process3;
+create table aa_gc_ins_process3 as
+select distinct patient_guid, 
+sum(npl) as npl_sum, 
+sum(misc) as misc_sum, 
+sum(mc_mngd) as mc_mngd_sum,
+sum(mc_ffs) as mc_ffs_sum, 
+sum(mil) as mil_sum, 
+sum(other_gov) as og_sum, 
+sum(bcbs) as bcbs_sum, 
+sum(medicaid) as medicaid_sum,
+sum(unclass) as unclass_sum, 
+sum(private) as private_sum, 
+sum(mngd_unspec) as mu_sum, 
+sum(dept_corr) as dc_sum
+from aa_gc_ins_process2
+group by patient_guid;
+
+/* patient_insurance needs to be cased as some patients will have more than 1 type of insurance, which can yield inaccurate count*/
+drop table if exists aa_gc_ins_process_final;
+create table aa_gc_ins_process_final as
+select distinct patient_guid,
+case when (medicaid_sum=1 and mc_mngd_sum=1 and mc_ffs_sum=1) then 'Medicare Advantage'
+when (private_sum=1 and mc_mngd_sum=1 and mc_ffs_sum=1) then 'Medicare Advantage'
+when (private_sum=1 and mc_ffs_sum=1) then 'Medicare Fee'
+when (private_sum=1 and mc_mngd_sum=1) then 'Medicare Advantage'
+when (private_sum=1 and medicaid_sum=1) then 'Medicaid'
+when private_sum=1 then 'Private'
+when medicaid_sum=1 then 'Medicaid'
+when mc_ffs_sum=1 then 'Medicare Fee'
+when mc_mngd_sum=1 then 'Medicare Advantage'
+when mil_sum=1 then 'Military & Other Government'
+when (og_sum=1 or dc_sum=1) then 'Military & Other Government'
+when (bcbs_sum=1 or mu_sum=1 or misc_sum=1) then 'Private'
+when (unclass_sum=1 or npl_sum=1) then 'Unknown'
+else 'Unknown'
+end as ins_type
+from aa_gc_ins_process3;
+
+-------
+-------
+drop table if exists main;
+
+create TEMPORARY table main as
+select a.*, b.ins_type from drug a 
+inner join aa_gc_ins_process_final b   
+on a.patient_guid = b.patient_guid;
+
+--------
+/* Medicare Adv by year*/
+
+select vegf_name, ins_type, effective_year, count(*) from main  
+where ins_type = 'Medicare Advantage'
+group by vegf_name, effective_year, ins_type  
+order by vegf_name, effective_year;
+
+/* Medicare Fee by year*/
+select vegf_name, ins_type, effective_year, count(*) from main  
+where ins_type = 'Medicare Fee'
+group by vegf_name, effective_year, ins_type  
+order by vegf_name, effective_year;
+
+
+
+							/* Other analysis */
+/* By Drug*/
+	/* Injection level - # of by injections given by vegf_name, total = 72,295,357*/
+select vegf_name, count(*) as inj_count from main group by vegf_name order by vegf_name ASC;
+	/* Patient level - # of unique patients that received an injection - total = 2,412,944*/
+select vegf_name, count(DISTINCT patient_guid) from main group by vegf_name order by vegf_name ASC;
+
+/*By Year*/
+	/* Injection level - # of by injections given by year, total = 72,295,357*/
+select effective_year, count(*) as inj_count from main group by effective_year order by effective_year ASC;
+	/* Patient level - # of unique patients that received an injection by year - total = 2,412,944*/
+select effective_year, count(DISTINCT patient_guid) from main group by effective_year order by effective_year ASC;
+
+/*By Insurance Type*/
+	/* Injection level - # of by injections given by year, total = 72,295,357*/
+select ins_type, count(*) as inj_count from main group by ins_type order by ins_type ASC;
+	/* Patient level - # of unique patients that received an injection by year - total = 3,794,037*/
+select ins_type, count(DISTINCT patient_guid) from main group by ins_type order by ins_type ASC;
+
+
+
