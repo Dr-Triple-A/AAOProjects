@@ -1,0 +1,60 @@
+/*Q1 - patients DIAGNOSED with RRD between 2013-1-1 and 2018-12-31*/
+/*Q2 - patietns from Q1 undergone RRD surgical procedure between 2013-1-1 and 2018-12-31 */
+/*Q3_part1 - Obtain the counts by age, gender, and race of the individuals identified above (from Q2).
+Report age from the first date of procedure (effective_date) per patient. */
+/*Q3 part 2 - stratify the counts by year of procedure */
+/*Q4 - sample of patients from Q1 who ALSO had an RRD surgical procedure AFTER date of RRD diagnosis */
+
+drop table if exists q1test;
+create temporary table q1test as
+select a.patient_guid, a.patient_diagnosis_id 
+from madrid.patient_diagnosis as a  
+where (a.practice_code ilike '361.00%' 
+or a.practice_code ilike '361.01%' 
+or a.practice_code ilike '361.02%' 
+or a.practice_code ilike '361.03%'
+or a.practice_code ilike '361.04%' 
+or a.practice_code ilike '361.05%' 
+or a.practice_code ilike '361.06%'
+or a.practice_code ilike '361.07%'
+or a.practice_code ilike 'H33.001%'
+or a.practice_code ilike 'H33.002%'
+or a.practice_code ilike 'H33.003%'
+or a.practice_code ilike 'H33.009%'
+or a.practice_code ilike 'H33.011%'
+or a.practice_code ilike 'H33.012%'
+or a.practice_code ilike 'H33.013%'
+or a.practice_code ilike 'H33.019%'
+or a.practice_code ilike 'H33.021%'
+or a.practice_code ilike 'H33.022%'
+or a.practice_code ilike 'H33.023%' 
+or a.practice_code ilike 'H33.029%'
+or a.practice_code ilike 'H33.031%'
+or a.practice_code ilike 'H33.032%'
+or a.practice_code ilike 'H33.033%'
+or a.practice_code ilike 'H33.039%'
+or a.practice_code ilike 'H33.041%'
+or a.practice_code ilike 'H33.042%'
+or a.practice_code ilike 'H33.043%'
+or a.practice_code ilike 'H33.049%' 
+or a.practice_code ilike 'H33.051%' 
+or a.practice_code ilike 'H33.052%'
+or a.practice_code ilike 'H33.053%'
+or a.practice_code ilike 'H33.059%'
+or a.practice_code ilike 'H33.8%');
+
+drop table if exists q2test;
+create temporary table q2test as
+select a.patient_guid, b.documentation_date  
+from q1test as a
+inner join madrid.patient_diagnosis_history as b 
+on a.patient_diagnosis_id=b.patient_diagnosis_id 
+and (extract(year from b.documentation_date) between '2013' and '2018');
+
+select * from q2test limit 10;
+
+select count(DISTINCT patient_guid) from q2test;
+
+
+
+
